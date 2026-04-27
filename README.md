@@ -308,9 +308,10 @@ docker restart <container_id>
 6. Set **Definition** → `Pipeline script from SCM`
 7. Set **SCM** → `Git`
 8. Enter your repo URL → `https://github.com/<your-username>/aceest-fitness.git`
-9. Set **Branch** to `*/main`
-10. Set **Script Path** → `Jenkinsfile`
-11. Click **Save**
+9. Leave the Credentials none only.
+10. Set **Branch** to `*/main`
+11. Set **Script Path** → `Jenkinsfile`
+12. Click **Save**
 
 ### Step 5: Expose Jenkins via ngrok
 
@@ -404,10 +405,354 @@ Example: `feat(clients): add DELETE endpoint for client removal`
 
 ---
 
-## Pipeline Screenshots
+# SonarQube Integration — Code Quality Analysis
+
+To enhance the CI/CD pipeline with **static code analysis and quality gates**, the project integrates SonarQube with Jenkins.
+
+SonarQube analyzes the codebase for:
+
+* Bugs 🐞
+* Code smells 🧹
+* Security vulnerabilities 🔒
+* Test coverage 📊
+
+---
+
+## SonarQube Local Setup (Docker)
+
+### Step 1: Run SonarQube container
+
+```bash
+docker run -d \
+  --name sonarqube \
+  -p 9000:9000 \
+  sonarqube:lts-community
+```
+
+Open in browser:
+
+```
+http://localhost:9000
+```
+
+Default login:
+
+```
+username: admin
+password: admin
+```
+---
+## Creating a Project in SonarQube
+
+Before generating the token, create a project for analysis:
+
+1. Click **Projects → Create Project**
+2. Select **Manually**
+3. Enter:
+  ```
+  Project Key: aceest-fitness-cloud
+  Display Name: aceest-fitness-cloud
+  ```
+4. Set the **Main Branch**:
+5. Click **Set Up**
+
+---
+
+## Generating SonarQube Token
+
+1. Login to SonarQube
+2. Click your profile (top right) → **My Account → Security**
+3. Enter name:
+
+   ```
+   jenkins-token
+   ```
+4. Select **Token Type**:
+
+    ```
+    Project Analysis Token
+    ```
+5. Select the project:
+
+    ```
+    aceest-fitness-cloud
+    ```
+6. Click **Generate**
+7. Copy the token (shown only once)
+
+---
+
+## Jenkins Configuration for SonarQube
+
+### Step 1: Install SonarQube Plugin
+
+1. Go to **Manage Jenkins → Plugins**
+2. Search:
+
+   ```
+   SonarQube Scanner
+   ```
+3. Install and restart Jenkins
+
+---
+
+### Step 2: Add SonarQube Credentials
+
+1. Go to **Manage Jenkins → Credentials**
+2. Click **Add Credentials**
+
+Fill:
+
+| Field  | Value                |
+| ------ | -------------------- |
+| Kind   | Secret Text          |
+| Secret | `<your-sonar-token>` |
+| ID     | `sonarqube-token`    |
+
+---
+
+### Step 3: Configure SonarQube Server
+
+Go to:
+**Manage Jenkins → System**
+
+Add SonarQube server:
+
+| Field                | Value                              |
+| -------------------- | ---------------------------------- |
+| Name                 | `SonarQube`                        |
+| Server URL           | `http://host.docker.internal:9000` |
+| Authentication Token | `sonarqube-token`                  |
+
+> **Important:**
+> Jenkins runs inside Docker, so `localhost` will not work.
+> `host.docker.internal` allows Jenkins to connect to SonarQube running on your machine.
+
+---
+
+### Step 4: Configure Sonar Scanner Tool
+
+Go to:
+**Manage Jenkins → Tools**
+
+Scroll to **SonarQube Scanner → Add**
+
+| Field                 | Value           |
+| --------------------- | --------------- |
+| Name                  | `sonar-scanner` |
+| Install automatically | ✅ Enabled       |
+
+---
+
+## Webhook Configuration (Required for Quality Gate)
+
+SonarQube must notify Jenkins when analysis is complete.
+
+### Step 1: Expose Jenkins via ngrok
+
+```bash
+ngrok http 8080
+```
+
+Example URL:
+
+```
+https://<your-ngrok-url>.ngrok-free.dev
+```
+
+---
+
+### Step 2: Configure Webhook in SonarQube
+
+Go to:
+**Administration → Configuration → Webhooks → Create**
+
+| Field | Value                                                        |
+| ----- | ------------------------------------------------------------ |
+| Name  | Jenkins                                                      |
+| URL   | `https://<your-ngrok-url>.ngrok-free.dev/sonarqube-webhook/` |
+
+Keep the Secret empty.
+
+---
+
+## Running Locally with Minikube & Kubernetes
+
+### Prerequisites
+
+- [Minikube](https://minikube.sigs.k8s.io/docs/start/) installed
+- [kubectl](https://kubernetes.io/docs/tasks/tools/) installed
+- Docker Desktop running
+
+### Prerequisites Installation for macOS using Homebrew
+
+> Ensure Homebrew is installed: https://brew.sh
+
+```bash
+# Update Homebrew
+brew update
+
+# Install kubectl
+brew install kubectl
+
+# Install Minikube
+brew install minikube
+
+# Start Minikube
+minikube start
+
+# Verify installation
+kubectl version --client
+minikube version
+
+---
+
+### Step 1: Start Minikube
+
+```bash
+minikube start
+```
+
+---
+
+### Step 2: Point Docker to Minikube's daemon
+
+This makes any image you build available inside Minikube without pushing to a registry.
+
+```bash
+eval $(minikube docker-env)
+```
+
+> Run this in every new terminal session before building.
+
+---
+
+### Step 3: Build the Docker image inside Minikube
+
+```bash
+docker build -t aceest-fitness:latest .
+```
+
+---
+
+### Step 4: Apply the Kubernetes manifests
+
+```bash
+kubectl apply -f k8s/namespace.yml
+kubectl apply -f k8s/deployment.yml
+kubectl apply -f k8s/service.yml
+```
+
+---
+
+### Step 5: Verify the pod is running
+
+```bash
+kubectl get all -n aceest-fitness
+```
+
+Wait until the pod shows `Running` and `READY 1/1` before continuing.
+
+You can view the status on UI by:
+
+  ```
+  minikube dashboard
+  ```
+---
+
+### Step 6: Get the service URL
+
+```bash
+# Get the NodePort URL for the app
+minikube service aceest-fitness -n aceest-fitness --url
+
+# Example output:
+# http://192.168.49.2:30500
+```
+
+Use that IP and port in place of `localhost:5000` for all requests below.
+
+---
+
+### Step 7: Test the API
+
+Replace `http://192.168.49.2:30500` with your actual URL from Step 6.
+
+**Insert a client into the database:**
+
+```bash
+curl -X POST http://192.168.49.2:30500/clients \
+  -H "Content-Type: application/json" \
+  -d '{"name": "Arjun", "age": 28, "weight": 75.0, "program": "Beginner (BG)"}'
+
+# Expected response:
+# {"calories":1950.0,"message":"Client added/updated successfully"}
+```
+
+**Read all clients from the database:**
+
+```bash
+curl http://192.168.49.2:30500/clients
+
+# Expected response:
+# [{"age":28,"calories":1950.0,"name":"Arjun","program":"Beginner (BG)","weight":75.0}]
+```
+
+---
+
+### Useful debugging commands
+
+```bash
+# Check pod status
+kubectl get pods -n aceest-fitness
+
+# Stream live logs from the app
+kubectl logs -f -n aceest-fitness deployment/aceest-fitness
+
+# Describe a pod for events and errors
+kubectl describe pod -n aceest-fitness <pod-name>
+
+# Open the Kubernetes dashboard
+minikube dashboard
+```
+
+---
+
+### Cleanup
+
+```bash
+# Delete all Kubernetes resources for this app
+kubectl delete -f k8s/
+
+# Delete a specific deployment only
+kubectl delete deployment aceest-fitness -n aceest-fitness
+
+# Stop Minikube (preserves cluster state)
+minikube stop
+
+# Delete the Minikube cluster entirely
+minikube delete
+```
+
+---
+
+## Jenkins Pipeline Screenshots
 ![](screenshots/1.png)
 ![](screenshots/2.png)
 ![](screenshots/3.png)
 
 ## GitHub Actions Screenshots
 ![](screenshots/4.png)
+
+## SonarQube Screenshots
+![](screenshots/5.png)
+![](screenshots/6.png)
+![](screenshots/7.png)
+![](screenshots/8.png)
+
+## Kubernetes Screenshots
+![](screenshots/9.png)
+![](screenshots/10.png)
+![](screenshots/11.png)
+![](screenshots/12.png)
+![](screenshots/13.png)
