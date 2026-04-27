@@ -2,9 +2,10 @@ pipeline {
     agent any
 
     environment {
-        IMAGE_NAME  = "aceest-fitness"
-        IMAGE_TAG   = "${env.BUILD_NUMBER}"
-        LOCAL_BIN   = "/var/jenkins_home/.local/bin"
+        IMAGE_NAME        = "aceest-fitness-cloud"
+        IMAGE_TAG         = "${env.BUILD_NUMBER}"
+        LOCAL_BIN         = "/var/jenkins_home/.local/bin"
+        SONAR_PROJECT_KEY = "aceest-fitness-cloud"
     }
 
     stages {
@@ -32,11 +33,36 @@ pipeline {
 
         stage('Unit Tests') {
             steps {
-                sh 'python3 -m pytest test_app.py -v --tb=short'
+                sh 'python3 -m pytest test_app.py -v --tb=short --cov=app --cov-report=xml:coverage.xml'
             }
             post {
                 always {
                     echo "Test stage complete"
+                }
+            }
+        }
+
+        stage('SonarQube Analysis') {
+            steps {
+                withSonarQubeEnv('SonarQube') {
+                    script {
+                        def scannerHome = tool 'sonar-scanner'
+                        sh """
+                            ${scannerHome}/bin/sonar-scanner \
+                                -Dsonar.projectKey=${SONAR_PROJECT_KEY} \
+                                -Dsonar.sources=. \
+                                -Dsonar.python.version=3.11 \
+                                -Dsonar.python.coverage.reportPaths=coverage.xml
+                        """
+                    }
+                }
+            }
+        }
+
+        stage('SonarQube Quality Gate') {
+            steps {
+                timeout(time: 5, unit: 'MINUTES') {
+                    waitForQualityGate abortPipeline: true
                 }
             }
         }
