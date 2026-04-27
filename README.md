@@ -733,6 +733,128 @@ minikube stop
 # Delete the Minikube cluster entirely
 minikube delete
 ```
+---
+
+## Kubernetes Deployment on GKE (Google Kubernetes Engine)
+
+This section describes how the application is deployed to a managed Kubernetes cluster on Google Cloud using GKE.
+
+---
+
+**Step 1: Prerequisites (Mac Setup)**
+Install required tools using Homebrew:
+
+```bash
+brew install --cask google-cloud-sdk
+brew install kubectl
+gcloud components install gke-gcloud-auth-plugin
+```
+
+Enable the plugin:
+
+```bash
+export USE_GKE_GCLOUD_AUTH_PLUGIN=True
+echo 'export USE_GKE_GCLOUD_AUTH_PLUGIN=True' >> ~/.zshrc
+source ~/.zshrc
+```
+
+---
+
+**Step 2: Authenticate with Google Cloud**
+
+```bash
+gcloud auth login
+gcloud config set project <your-project-id>
+```
+
+---
+
+**Step 3: Create GKE Cluster**
+
+```bash
+gcloud container clusters create aceest-cluster \
+  --num-nodes=2 \
+  --zone=asia-south1-a
+```
+
+---
+
+**Step 4: Connect kubectl to Cluster**
+
+```bash
+gcloud container clusters get-credentials aceest-cluster \
+  --zone=asia-south1-a
+```
+
+Verify:
+
+```bash
+kubectl get nodes
+```
+
+---
+
+**Step 5: Build & Push Docker Image (Multi-Arch)**
+Required to support both Mac (ARM) and GKE (AMD64):
+
+```bash
+docker buildx create --use
+
+docker buildx build \
+  --platform linux/amd64,linux/arm64 \
+  -t <docker-username>/aceest-fitness-cloud:v2 \
+  --push .
+```
+
+Verify image:
+
+```bash
+docker buildx imagetools inspect <docker-username>/aceest-fitness-cloud:v2
+```
+
+---
+
+**Step 6: Deploy to GKE**
+
+```bash
+kubectl apply -f namespace.yml
+kubectl apply -f deployment.yml
+kubectl apply -f service.yml
+```
+
+---
+
+**Step 7: Verify Deployment**
+
+```bash
+kubectl get pods -n aceest-fitness
+```
+
+Expected:
+
+```text
+STATUS = Running
+```
+
+---
+
+**Step 8: Access Application**
+
+```bash
+kubectl get svc -n aceest-fitness
+```
+
+Wait for:
+
+```text
+EXTERNAL-IP
+```
+
+Then open:
+
+```text
+http://<EXTERNAL-IP>
+```
 
 ---
 
@@ -756,3 +878,11 @@ minikube delete
 ![](screenshots/11.png)
 ![](screenshots/12.png)
 ![](screenshots/13.png)
+
+## GKE Screenshots
+![](screenshots/14.png)
+![](screenshots/15.png)
+![](screenshots/16.png)
+![](screenshots/17.png)
+![](screenshots/18.png)
+![](screenshots/19.png)
