@@ -855,6 +855,90 @@ Then open:
 ```text
 http://<EXTERNAL-IP>
 ```
+---
+
+## Deployment Strategies (Kubernetes - GKE)
+
+The application is deployed on GKE using Kubernetes Deployments. The primary strategy used is **Rolling Update**, while other strategies are supported and demonstrated via commands.
+
+---
+
+### Rolling Update
+
+Kubernetes uses **Rolling Update** by default.
+
+* Pods are updated gradually
+* No downtime during deployment
+* Old pods are removed only after new ones are healthy
+
+---
+
+### Blue-Green Deployment
+
+GKE supports blue-green deployments at the node pool level.
+
+From GKE UI:
+
+```text
+Upgrade strategy: Blue-green upgrade
+```
+
+Rollback can be achieved by reverting to the previous version.
+
+---
+
+### Canary Deployment
+
+Deploy a small number of pods with a new version:
+
+```bash
+kubectl set image deployment/aceest-fitness \
+  aceest-fitness=<docker-username>/aceest-fitness-cloud:v2 \
+  -n aceest-fitness
+
+kubectl scale deployment aceest-fitness --replicas=2 -n aceest-fitness
+```
+
+---
+
+### Shadow Deployment
+
+Run a parallel deployment without affecting main traffic:
+
+```bash
+kubectl create deployment aceest-fitness-shadow \
+  --image=<docker-username>/aceest-fitness-cloud:v2 \
+  -n aceest-fitness
+```
+
+---
+
+### A/B Testing
+
+Can be simulated using multiple deployments and services:
+
+```bash
+kubectl create deployment aceest-fitness-v2 \
+  --image=<docker-username>/aceest-fitness-cloud:v2 \
+  -n aceest-fitness
+```
+
+---
+
+### Rollback Mechanism
+
+Revert to last stable version:
+
+```bash
+kubectl rollout undo deployment aceest-fitness -n aceest-fitness
+```
+
+---
+
+* Rolling Update → used in deployment
+* Blue-Green → supported via GKE
+* Canary, Shadow, A/B → demonstrated via commands
+* Rollback → handled using Kubernetes
 
 ---
 
